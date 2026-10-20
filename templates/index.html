@@ -4,15 +4,111 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    body, #map { margin: 0; height: 100vh; }
+    * { box-sizing: border-box; }
+
+    body, #map {
+      margin: 0;
+      height: 100vh;
+      font-family: Arial, sans-serif;
+    }
+
+    .search-wrap {
+      position: absolute;
+      z-index: 1000;
+      top: 18px;
+      left: 50%;
+      width: min(460px, calc(100% - 32px));
+      transform: translateX(-50%);
+    }
+
+    .search-form,
+    .location-choice {
+      padding: 10px;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 3px 14px rgb(0 0 0 / 20%);
+    }
+
+    .search-form {
+      display: flex;
+      gap: 8px;
+    }
+
+    #location-input {
+      min-width: 0;
+      flex: 1;
+      border: 1px solid #d4d8dd;
+      border-radius: 8px;
+      padding: 11px 12px;
+      font-size: 15px;
+    }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+
+    .search-button, .go-button {
+      color: #fff;
+      background: #1769aa;
+    }
+
+    .cancel-button {
+      color: #333;
+      background: #e9ecef;
+    }
+
+    .location-choice {
+      display: none;
+      margin-top: 8px;
+    }
+
+    .location-name {
+      margin: 0 0 10px;
+      color: #333;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .choice-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .status {
+      display: block;
+      padding: 6px 4px 0;
+      color: #555;
+      font-size: 13px;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
-  <div id="map"></div>
+  <!-- location search -->
+  <div class="search-wrap">
+    <form class="search-form" id="search-form">
+      <input id="location-input" type="search" placeholder="Search for a location..." autocomplete="off" required>
+      <button class="search-button" type="submit">Search</button>
+    </form>
+    <div class="location-choice" id="location-choice">
+      <p class="location-name" id="location-name"></p>
+      <div class="choice-actions">
+        <button class="go-button" id="go-button" type="button">Go</button>
+        <button class="cancel-button" id="cancel-button" type="button">Cancel</button>
+      </div>
+    </div>
+    <span class="status" id="status" role="status"></span>
+  </div>
+  <!-- map display -->
+  <div id="map"></div> 
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // Max zoom set to 18 so it physically stops before turning white
+
+    // prevent map from turning all white from scrolling too far (issue due to using a raster tile layer)
     const map = L.map("map", { maxZoom: 18 }).setView([38.9632, -76.7417], 16);
 
     L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png?key={{ key }}", {
@@ -23,6 +119,68 @@
     navigator.geolocation?.getCurrentPosition(pos => {
       map.setView([pos.coords.latitude, pos.coords.longitude], 17);
       L.circleMarker([pos.coords.latitude, pos.coords.longitude], { radius: 8, color: "#33b5f5" }).addTo(map);
+    });
+
+    const form = document.getElementById("search-form");
+    const input = document.getElementById("location-input");
+    const choice = document.getElementById("location-choice");
+    const name = document.getElementById("location-name");
+    const status = document.getElementById("status");
+    const goButton = document.getElementById("go-button");
+    const cancelButton = document.getElementById("cancel-button");
+    let marker;
+    let selected;
+
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const query = input.value.trim();
+      if (!query) return;
+
+      choice.style.display = "none";
+      if (marker) map.removeLayer(marker);
+
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`
+        );
+        if (!response.ok) throw new Error("Location search failed");
+        const results = await response.json();
+        if (!results.length) {
+          status.textContent = "Location not found. Try another search."; // error handling
+          return;
+        }
+
+        selected = results[0];
+        const point = [Number(selected.lat), Number(selected.lon)];
+        marker = L.circleMarker(point, {
+          radius: 11,
+          color: "#1769aa",
+          weight: 3,
+          fillColor: "#4da3d9",
+          fillOpacity: 0.7
+        }).addTo(map);
+        map.setView(point, 16);
+        name.textContent = selected.display_name;
+        choice.style.display = "block";
+        status.textContent = "";
+      } catch (error) {
+        status.textContent = "Search failed.";
+      }
+    });
+
+    goButton.addEventListener("click", () => {
+      if (!selected) return;
+      marker.setStyle({ color: "#16803c", fillColor: "#43b581" });
+      choice.style.display = "none";
+      status.textContent = `Destination selected: ${selected.display_name}`;
+    });
+
+    cancelButton.addEventListener("click", () => {
+      if (marker) map.removeLayer(marker);
+      marker = null;
+      selected = null;
+      choice.style.display = "none";
+      status.textContent = "";
     });
   </script>
 </body>
