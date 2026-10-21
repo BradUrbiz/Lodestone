@@ -12,6 +12,45 @@
       font-family: Arial, sans-serif;
     }
 
+    .welcome-screen {
+      display: flex;
+      position: fixed;
+      z-index: 2000;
+      inset: 0;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
+      padding: 24px;
+      background: #fff;
+    }
+
+    .welcome-logo {
+      display: block;
+      width: min(100%, 1200px);
+      height: auto;
+    }
+
+    .start-button {
+      color: #fff;
+      background: #1769aa;
+      box-shadow: 0 3px 14px rgb(0 0 0 / 35%);
+      font-size: 18px;
+      padding: 14px 32px;
+    }
+
+    .welcome-tagline {
+      margin: 0;
+      color: #333;
+      font-size: 24px;
+      text-align: center;
+    }
+
+    .app {
+      display: none;
+      height: 100vh;
+    }
+
     .search-wrap {
       position: absolute;
       z-index: 1000;
@@ -19,6 +58,19 @@
       left: 50%;
       width: min(460px, calc(100% - 32px));
       transform: translateX(-50%);
+    }
+
+    .top-right-controls {
+      position: absolute;
+      z-index: 1000;
+      top: 18px;
+      right: 18px;
+    }
+
+    .home-button {
+      color: #fff;
+      background: #1769aa;
+      box-shadow: 0 3px 14px rgb(0 0 0 / 20%);
     }
 
     .search-form,
@@ -87,23 +139,37 @@
   </style>
 </head>
 <body>
-  <!-- location search -->
-  <div class="search-wrap">
-    <form class="search-form" id="search-form">
-      <input id="location-input" type="search" placeholder="Search for a location..." autocomplete="off" required>
-      <button class="search-button" type="submit">Search</button>
-    </form>
-    <div class="location-choice" id="location-choice">
-      <p class="location-name" id="location-name"></p>
-      <div class="choice-actions">
-        <button class="go-button" id="go-button" type="button">Go</button>
-        <button class="cancel-button" id="cancel-button" type="button">Cancel</button>
-      </div>
+  <main class="welcome-screen" id="welcome-screen">
+    <img class="welcome-logo" src="/imgs/lodestonename.png" alt="Lodestone">
+    <!-- under first page logo -->
+    <p class="welcome-tagline">Safety just got a whole Lode easier</p> 
+    <button class="start-button" id="start-button" type="button">Start</button>
+  </main>
+
+  <div class="app" id="app">
+    <div class="top-right-controls">
+      <button class="home-button" id="home-button" type="button" aria-label="Return to your current location">
+        Home
+      </button>
     </div>
-    <span class="status" id="status" role="status"></span>
+    <!-- location search -->
+    <div class="search-wrap">
+      <form class="search-form" id="search-form">
+        <input id="location-input" type="search" placeholder="Search for a location..." autocomplete="off" required>
+        <button class="search-button" type="submit">Search</button>
+      </form>
+      <div class="location-choice" id="location-choice">
+        <p class="location-name" id="location-name"></p>
+        <div class="choice-actions">
+          <button class="go-button" id="go-button" type="button">Go</button>
+          <button class="cancel-button" id="cancel-button" type="button">Cancel</button>
+        </div>
+      </div>
+      <span class="status" id="status" role="status"></span>
+    </div>
+    <!-- map display -->
+    <div id="map"></div>
   </div>
-  <!-- map display -->
-  <div id="map"></div> 
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
@@ -116,16 +182,41 @@
       subdomains: "abcd"
     }).addTo(map);
 
-    navigator.geolocation?.getCurrentPosition(pos => {
-      map.setView([pos.coords.latitude, pos.coords.longitude], 17);
-      L.circleMarker([pos.coords.latitude, pos.coords.longitude], { radius: 8, color: "#33b5f5" }).addTo(map);
+    const status = document.getElementById("status");
+    let currentLocationMarker;
+
+    document.getElementById("start-button").addEventListener("click", () => {
+      document.getElementById("welcome-screen").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      map.invalidateSize();
+      showCurrentLocation();
     });
+
+    const showCurrentLocation = () => {
+      if (!navigator.geolocation) {
+        status.textContent = "Location services are not available.";
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(pos => {
+        const point = [pos.coords.latitude, pos.coords.longitude];
+        map.setView(point, 17);
+        if (currentLocationMarker) map.removeLayer(currentLocationMarker);
+        currentLocationMarker = L.circleMarker(point, {
+          radius: 8,
+          color: "#33b5f5"
+        }).addTo(map);
+      }, () => {
+        status.textContent = "Unable to find your current location.";
+      });
+    };
+
+    document.getElementById("home-button").addEventListener("click", showCurrentLocation);
 
     const form = document.getElementById("search-form");
     const input = document.getElementById("location-input");
     const choice = document.getElementById("location-choice");
     const name = document.getElementById("location-name");
-    const status = document.getElementById("status");
     const goButton = document.getElementById("go-button");
     const cancelButton = document.getElementById("cancel-button");
     let marker;
