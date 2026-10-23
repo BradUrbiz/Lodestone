@@ -1,0 +1,21 @@
+infrastructure
+    no_sidewalk
+    no_crosswalk
+    highway
+    sidewalk
+    crosswalk
+    no_highway
+    school_zone
+traffic
+    high speed limit (50mph>)
+    heavy traffic volume
+crash_data
+    pedestrian crashes
+    car crashes
+    bicycle crashes
+    fatal crashes
+community_validation
+    highly rated
+    frequently used
+    verified safe
+    no hazards reported
