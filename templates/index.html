@@ -6,8 +6,10 @@
   <title>Lodestone</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    * {
+- {
       box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
 
     body, #map {
@@ -66,7 +68,8 @@
       top: 18px;
       left: 50%;
       transform: translateX(-50%);
-      width: min(460px, calc(100% - 32px));
+-       width: min(460px, calc(100%
+32px));
     }
 
     .top-right-controls {
@@ -144,7 +147,6 @@
   <!-- hero page -->
   <main class="welcome-screen" id="welcome-screen">
     <img class="welcome-logo" src="/imgs/lodestonename.png" alt="Lodestone">
-    <!-- under first page logo -->
     <p class="welcome-tagline">Safety just got a whole Lode easier</p> 
     <button class="start-button" id="start-button" type="button">Start</button>
   </main>
@@ -154,7 +156,7 @@
     <div class="top-right-controls">
       <button class="home-button" id="home-button" type="button">Home</button>
     </div>
-    <!-- location search -->
+    
     <div class="search-wrap">
       <form class="search-form" id="search-form">
         <input id="location-input" type="search" placeholder="Search destination..." required>
@@ -170,12 +172,13 @@
       </div>
       <span class="status" id="status"></span>
     </div>
-    <!-- map display -->
+
     <div id="map"></div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
+    // initialize map
     const map = L.map("map", { maxZoom: 18 }).setView([38.9632, -76.7417], 16);
 
     L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png?key={{ key }}", {
@@ -183,10 +186,11 @@
       subdomains: "abcd"
     }).addTo(map);
 
-    const status = document.getElementById("status");
-    let currentLocationMarker;
     let myLat = null;
     let myLon = null;
+    let selectedDest = null;
+    let destMarker = null;
+    let userMarker = null;
     let routeLine = null;
 
     const status = document.getElementById("status");
@@ -202,15 +206,13 @@
       navigator.geolocation.getCurrentPosition(pos => {
         myLat = pos.coords.latitude;
         myLon = pos.coords.longitude;
-        const point = [myLat, myLon];
-        map.setView(point, 17);
-        if (currentLocationMarker) map.removeLayer(currentLocationMarker);
-        currentLocationMarker = L.circleMarker(point, {
-          radius: 8,
-          color: "#33b5f5",
-          fillColor: "#33b5f5",
-          fillOpacity: 1
-        }).addTo(map);
+        map.setView([myLat, myLon], 16);
+
+        if (!userMarker) {
+          userMarker = L.circleMarker([myLat, myLon], { radius: 8, color: "#00abff", fillOpacity: 1 }).addTo(map);
+        } else {
+          userMarker.setLatLng([myLat, myLon]);
+        }
       }, () => {
         status.textContent = "Unable to get GPS location.";
       });
@@ -238,7 +240,7 @@
         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`);
         const results = await res.json();
         if (!results.length) {
-          status.textContent = "Location not found. Try another search.";
+          status.textContent = "Location not found.";
           return;
         }
 
@@ -260,57 +262,50 @@
       }
     });
 
-    goButton.addEventListener("click", async () => {
-      if (!selected) return;
-
-      if (!myLat || !myLon) {
-        status.textContent = "Waiting for your starting location. Please tap Home first.";
+    // request route
+    document.getElementById("go-button").addEventListener("click", async () => {
+      if (!selectedDest || !myLat) {
+        status.textContent = "Location error";
         return;
       }
 
-      status.textContent = "Calculating safest path...";
-
+      status.textContent = "Calculating route...";
       try {
-        const response = await fetch("/api/route", {
+        const res = await fetch("/api/route", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             start_lat: myLat,
             start_lon: myLon,
-            dest_lat: Number(selected.lat),
-            dest_lon: Number(selected.lon)
+            dest_lat: Number(selectedDest.lat),
+            dest_lon: Number(selectedDest.lon)
           })
         });
 
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Failed to calculate route");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Routing failed");
 
         if (routeLine) map.removeLayer(routeLine);
+        routeLine = L.polyline(data.points, { color: "#1769aa", weight: 6, opacity: 0.85 }).addTo(map);
+        map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
 
-        routeLine = L.polyline(data.points, {
-          color: "#1769aa",
-          weight: 6,
-          opacity: 0.85
-        }).addTo(map);
-
-        map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
-
-        marker.setStyle({ color: "#16803c", fillColor: "#43b581" });
-        choice.style.display = "none";
-
+        destMarker.setStyle({ color: "#169c46" });
+        choiceBox.style.display = "none";
+        // display score and details abt it
         status.innerHTML = `<strong>Safety Score: ${data.score}/1000</strong> &bull; ${data.minutes} min (${data.miles} mi)`;
       } catch (err) {
-        status.textContent = err.message || "Failed to calculate route.";
+        status.textContent = err.message;
       }
     });
 
-    cancelButton.addEventListener("click", () => {
-      if (marker) map.removeLayer(marker);
+    // reset view
+    document.getElementById("cancel-button").addEventListener("click", () => {
+      if (destMarker) map.removeLayer(destMarker);
       if (routeLine) map.removeLayer(routeLine);
-      marker = null;
-      selected = null;
+      destMarker = null;
       routeLine = null;
-      choice.style.display = "none";
+      selectedDest = null;
+      choiceBox.style.display = "none";
       status.textContent = "";
     });
   </script>
