@@ -1,6 +1,8 @@
 import os
 from dotenv import load_dotenv
-from flask import Flask, render_template, send_from_directory
+from flask import *
+import requests
+from services.scoring import calculate_score
 
 load_dotenv()
 app = Flask(__name__)
@@ -12,8 +14,6 @@ def home():
 @app.route("/imgs/<path:filename>")
 def images(filename):
     return send_from_directory(os.path.join(app.root_path, "imgs"), filename)
-<<<<<<< HEAD
-=======
 @app.route("/api/route", methods=["POST"])
 def get_route():
 # getting current GPS and target GPS
@@ -53,7 +53,6 @@ def get_route():
         "miles": round(route["distance"] * 0.000621371, 2),
         "score": safety_score
     })
->>>>>>> c0b4163 (Add routing path via OSRM foot, color correction for distinctness)
 
 if __name__ == "__main__":
     app.run(debug=True)
