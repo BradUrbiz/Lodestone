@@ -41,7 +41,7 @@
       text-align: center;
     }
 
-    .start-button, .search-button, .go-button, .home-button {
+    .start-button, .search-button, .go-button, .home-button, .paths-button {
       color: #fff;
       background: #1769aa;
       border: 0;
@@ -76,11 +76,81 @@
       z-index: 1000;
       top: 18px;
       right: 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
     }
 
-    .home-button {
+    .home-button, .paths-button {
       padding: 10px 14px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .paths-button {
+      display: none;
+      background: #4a5568;
+    }
+
+    .routes-panel {
+      display: none;
+      width: 250px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 8px;
+      margin-top: 4px;
+    }
+
+    .route-item {
+      padding: 8px;
+      margin-bottom: 6px;
+      border-radius: 6px;
+      border: 1px solid #eee;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .route-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .route-item.active {
+      border: 1px solid #1769aa;
+      background: #fff;
+    }
+
+    .route-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2px;
+    }
+
+    .route-title {
+      font-weight: bold;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .color-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .route-score {
+      font-size: 12px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .route-meta {
+      font-size: 12px;
+      color: #666;
     }
 
     .search-form, .location-choice {
@@ -143,17 +213,20 @@
 </head>
 <body>
 
-  <!-- hero page -->
   <main class="welcome-screen" id="welcome-screen">
     <img class="welcome-logo" src="/imgs/lodestonename.png" alt="Lodestone">
     <p class="welcome-tagline">Safety just got a whole Lode easier</p> 
     <button class="start-button" id="start-button" type="button">Start</button>
   </main>
 
-  <!-- main app -->
   <div class="app" id="app">
     <div class="top-right-controls">
       <button class="home-button" id="home-button" type="button">Home</button>
+      <button class="paths-button" id="paths-button" type="button">Other paths</button>
+      
+      <div class="routes-panel" id="routes-panel">
+        <div id="routes-list"></div>
+      </div>
     </div>
     
     <div class="search-wrap">
@@ -177,7 +250,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // initialize map
+    // map and base tiles
     const map = L.map("map", { maxZoom: 18 }).setView([38.9632, -76.7417], 16);
 
     L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png?key={{ key }}", {
@@ -190,45 +263,96 @@
     let selectedDest = null;
     let destMarker = null;
     let userMarker = null;
-    let routeLine = null;
+    let watchId = null;
+
+    let routeData = [];
+    let polylineLayers = [];
+    let selectedIndex = 0;
+    let panelVisible = false;
 
     const status = document.getElementById("status");
     const choiceBox = document.getElementById("location-choice");
     const locationName = document.getElementById("location-name");
+    const pathsBtn = document.getElementById("paths-button");
+    const routesPanel = document.getElementById("routes-panel");
+    const routesList = document.getElementById("routes-list");
 
-    // current position
-    function locateUser() {
+    const routePalette = [
+      { color: "#1769aa", label: "Suggested" },
+      { color: "#e67e22", label: "Option 2" },
+      { color: "#8e44ad", label: "Option 3" }
+    ];
+
+    // clear drawn lines and reset list
+    function clearRoutes() {
+      polylineLayers.forEach(l => map.removeLayer(l));
+      polylineLayers = [];
+      routeData = [];
+      selectedIndex = 0;
+      panelVisible = false;
+      pathsBtn.style.display = "none";
+      routesPanel.style.display = "none";
+      routesList.innerHTML = "";
+    }
+
+    // continuous live gps tracking
+    function startLiveTracking(centerOnUser = false) {
       if (!navigator.geolocation) {
         status.textContent = "Location unavailable.";
         return;
       }
-      navigator.geolocation.getCurrentPosition(pos => {
+
+      const geoOptions = {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000
+      };
+
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+
+      watchId = navigator.geolocation.watchPosition(pos => {
         myLat = pos.coords.latitude;
         myLon = pos.coords.longitude;
-        map.setView([myLat, myLon], 16);
 
         if (!userMarker) {
-          userMarker = L.circleMarker([myLat, myLon], { radius: 8, color: "#00abff", fillOpacity: 1 }).addTo(map);
+          userMarker = L.circleMarker([myLat, myLon], { 
+            radius: 8, 
+            color: "#ffffff", 
+            fillColor: "#00abff", 
+            fillOpacity: 1, 
+            weight: 2 
+          }).addTo(map);
+          map.setView([myLat, myLon], 17);
         } else {
           userMarker.setLatLng([myLat, myLon]);
         }
+
+        if (centerOnUser) {
+          map.setView([myLat, myLon], 17);
+        }
       }, () => {
-        status.textContent = "Unable to get GPS location.";
-      });
+        status.textContent = "Unable to read GPS location.";
+      }, geoOptions);
     }
 
-    // start button
     document.getElementById("start-button").addEventListener("click", () => {
       document.getElementById("welcome-screen").style.display = "none";
       document.getElementById("app").style.display = "block";
       map.invalidateSize();
-      locateUser();
+      startLiveTracking(true);
     });
 
-    // home button
-    document.getElementById("home-button").addEventListener("click", locateUser);
+    document.getElementById("home-button").addEventListener("click", () => {
+      if (myLat && myLon) {
+        map.setView([myLat, myLon], 17);
+      } else {
+        startLiveTracking(true);
+      }
+    });
 
-    // search
+    // search address
     document.getElementById("search-form").addEventListener("submit", async e => {
       e.preventDefault();
       const query = document.getElementById("location-input").value.trim();
@@ -261,14 +385,74 @@
       }
     });
 
-    // request route
+    // switch active route styling
+    function highlightSelectedRoute(idx) {
+      selectedIndex = idx;
+
+      polylineLayers.forEach((layer, i) => {
+        if (i === idx) {
+          layer.setStyle({
+            weight: 7,
+            opacity: 1,
+            dashArray: null
+          }).bringToFront();
+        } else {
+          layer.setStyle({
+            weight: 4,
+            opacity: 0.45,
+            dashArray: "6, 8"
+          });
+        }
+      });
+
+      document.querySelectorAll(".route-item").forEach((el, i) => {
+        if (i === idx) {
+          el.classList.add("active");
+        } else {
+          el.classList.remove("active");
+        }
+      });
+
+      const activeRoute = routeData[idx];
+      const activeMeta = routePalette[idx];
+      status.innerHTML = `<strong>${activeMeta.label}: ${activeRoute.score}/1000</strong> &bull; ${activeRoute.minutes} min (${activeRoute.miles} mi)`;
+    }
+
+    // populate other paths drawer
+    function renderRoutesList() {
+      routesList.innerHTML = "";
+      routeData.forEach((r, idx) => {
+        const meta = routePalette[idx];
+        const item = document.createElement("div");
+        item.className = `route-item ${idx === selectedIndex ? "active" : ""}`;
+        item.innerHTML = `
+          <div class="route-header">
+            <span class="route-title">
+              <span class="color-dot" style="background: ${meta.color}"></span>
+              ${meta.label}
+            </span>
+            <span class="route-score">${r.score}/1000</span>
+          </div>
+          <div class="route-meta">
+            ${r.minutes} min &bull; ${r.miles} mi
+          </div>
+        `;
+        item.addEventListener("click", () => {
+          highlightSelectedRoute(idx);
+          map.fitBounds(polylineLayers[idx].getBounds(), { padding: [40, 40] });
+        });
+        routesList.appendChild(item);
+      });
+    }
+
+    // fetch routes from backend
     document.getElementById("go-button").addEventListener("click", async () => {
       if (!selectedDest || !myLat) {
         status.textContent = "Location error";
         return;
       }
 
-      status.textContent = "Calculating route...";
+      status.textContent = "Auditing walking paths...";
       try {
         const res = await fetch("/api/route", {
           method: "POST",
@@ -284,25 +468,47 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Routing failed");
 
-        if (routeLine) map.removeLayer(routeLine);
-        routeLine = L.polyline(data.points, { color: "#1769aa", weight: 6, opacity: 0.85 }).addTo(map);
-        map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+        clearRoutes();
+
+        routeData = [data.primary, ...(data.alternates || [])];
+
+        routeData.forEach((r, idx) => {
+          const cfg = routePalette[idx];
+          const isPrimary = (idx === 0);
+          const line = L.polyline(r.points, {
+            color: cfg.color,
+            weight: isPrimary ? 6 : 4,
+            opacity: isPrimary ? 0.95 : 0.45,
+            dashArray: isPrimary ? null : "6, 8"
+          }).addTo(map);
+
+          polylineLayers.push(line);
+        });
+
+        map.fitBounds(polylineLayers[0].getBounds(), { padding: [40, 40] });
+
+        if (routeData.length > 1) {
+          pathsBtn.style.display = "block";
+          renderRoutesList();
+        }
 
         destMarker.setStyle({ color: "#169c46" });
         choiceBox.style.display = "none";
-        // display score and details abt it
-        status.innerHTML = `<strong>Safety Score: ${data.score}/1000</strong> &bull; ${data.minutes} min (${data.miles} mi)`;
+        status.innerHTML = `<strong>Suggested: ${data.primary.score}/1000</strong> &bull; ${data.primary.minutes} min (${data.primary.miles} mi)`;
       } catch (err) {
         status.textContent = err.message;
       }
     });
 
-    // reset view
+    pathsBtn.addEventListener("click", () => {
+      panelVisible = !panelVisible;
+      routesPanel.style.display = panelVisible ? "block" : "none";
+    });
+
     document.getElementById("cancel-button").addEventListener("click", () => {
       if (destMarker) map.removeLayer(destMarker);
-      if (routeLine) map.removeLayer(routeLine);
+      clearRoutes();
       destMarker = null;
-      routeLine = null;
       selectedDest = null;
       choiceBox.style.display = "none";
       status.textContent = "";
