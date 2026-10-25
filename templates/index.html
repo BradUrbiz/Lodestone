@@ -75,6 +75,7 @@
       position: relative;
     }
 
+    /* top search container */
     .search-wrap {
       position: absolute;
       z-index: 1000;
@@ -154,6 +155,7 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     }
 
+    /* top-right home button */
     .home-button {
       position: absolute;
       z-index: 1000;
@@ -168,6 +170,7 @@
       justify-content: center;
     }
 
+    /* 90-degree rotated tab button pinned against right edge */
     .paths-dock {
       position: absolute;
       z-index: 1000;
@@ -175,8 +178,6 @@
       top: 50%;
       transform: translateY(-50%);
       display: none;
-      flex-direction: row-reverse;
-      align-items: center;
     }
 
     .paths-tab-btn {
@@ -191,48 +192,52 @@
       white-space: nowrap;
       transform: rotate(-90deg);
       transform-origin: bottom right;
-      margin-right: 0;
     }
 
     .routes-panel {
+      position: absolute;
+      z-index: 1000;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
       display: none;
       background: #fff;
       border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 8px;
-      margin-right: 12px;
-      max-width: calc(100vw - 60px);
-      box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+      border-radius: 12px;
+      padding: 10px;
+      max-width: calc(100vw - 32px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
       overflow-x: auto;
     }
 
     #routes-list {
       display: flex;
       flex-direction: row;
-      gap: 8px;
+      gap: 10px;
     }
 
     .route-item {
-      min-width: 130px;
+      min-width: 105px;
       padding: 8px 10px;
-      margin-bottom: 0;
-      border-radius: 6px;
+      border-radius: 8px;
       border: 1px solid #eee;
       background: #fff;
       cursor: pointer;
       flex-shrink: 0;
+      text-align: center;
     }
 
     .route-item.active {
-      border: 1.5px solid #1769aa;
+      border: 2px solid #1769aa;
       background: #f8fafc;
     }
 
     .route-header {
       display: flex;
-      justify-content: space-between;
+      flex-direction: column;
       align-items: center;
-      margin-bottom: 2px;
+      gap: 4px;
+      margin-bottom: 4px;
     }
 
     .route-title {
@@ -240,7 +245,7 @@
       font-size: 13px;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
     }
 
     .color-dot {
@@ -251,13 +256,13 @@
     }
 
     .route-score {
-      font-size: 12px;
+      font-size: 13px;
       font-weight: bold;
-      color: #333;
+      color: #1769aa;
     }
 
     .route-meta {
-      font-size: 12px;
+      font-size: 11px;
       color: #666;
     }
 
@@ -294,12 +299,12 @@
       <span class="status" id="status" style="display:none;"></span>
     </div>
 
-    <!-- right side tab -->
     <div class="paths-dock" id="paths-dock">
       <button class="paths-tab-btn" id="paths-button" type="button">Other paths</button>
-      <div class="routes-panel" id="routes-panel">
-        <div id="routes-list"></div>
-      </div>
+    </div>
+
+    <div class="routes-panel" id="routes-panel">
+      <div id="routes-list"></div>
     </div>
 
     <div id="map"></div>
@@ -307,7 +312,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // initialize map with bottom-right zoom controls to prevent overlap
+    // initialize map with bottom right zoom controls to prevent overlap
     const map = L.map("map", { 
       maxZoom: 18,
       zoomControl: false 
@@ -341,7 +346,7 @@
     const routesList = document.getElementById("routes-list");
 
     const routePalette = [
-      { color: "#1769aa", label: "Recommended" },
+      { color: "#1769aa", label: "Suggested" },
       { color: "#e67e22", label: "Option 2" },
       { color: "#8e44ad", label: "Option 3" }
     ];
@@ -525,7 +530,7 @@
         return;
       }
 
-      showStatus("Lode-ing walking paths...");
+      showStatus("Auditing walking paths...");
       try {
         const res = await fetch("/api/route", {
           method: "POST",
@@ -561,7 +566,7 @@
         map.fitBounds(polylineLayers[0].getBounds(), { padding: [40, 40] });
 
         if (routeData.length > 1) {
-          pathsDock.style.display = "flex";
+          pathsDock.style.display = "block";
           renderRoutesList();
         }
 
@@ -573,6 +578,7 @@
       }
     });
 
+    // toggle panel visibility
     pathsBtn.addEventListener("click", () => {
       panelVisible = !panelVisible;
       routesPanel.style.display = panelVisible ? "block" : "none";
