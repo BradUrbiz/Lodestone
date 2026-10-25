@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Lodestone</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -10,13 +10,24 @@
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    body, #map {
-      height: 100vh;
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
       font-family: Arial, sans-serif;
+      background: #fff;
     }
 
+    #map {
+      height: 100%;
+      width: 100%;
+      z-index: 1;
+    }
+
+    /* welcome intro screen */
     .welcome-screen {
       position: fixed;
       z-index: 2000;
@@ -25,23 +36,24 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 24px;
+      gap: 20px;
       padding: 24px;
       background: #fff;
     }
 
     .welcome-logo {
-      width: min(100%, 420px);
+      width: min(85%, 380px);
       height: auto;
     }
 
     .welcome-tagline {
       color: #333;
-      font-size: 22px;
+      font-size: 19px;
       text-align: center;
+      line-height: 1.4;
     }
 
-    .start-button, .search-button, .go-button, .home-button, .paths-button {
+    .start-button, .search-button, .go-button, .home-button, .paths-tab-btn {
       color: #fff;
       background: #1769aa;
       border: 0;
@@ -51,73 +63,169 @@
     }
 
     .start-button {
-      font-size: 18px;
-      padding: 14px 32px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      font-size: 17px;
+      padding: 14px 36px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
 
     .app {
       display: none;
-      height: 100vh;
+      height: 100%;
+      width: 100%;
       position: relative;
     }
 
     .search-wrap {
       position: absolute;
       z-index: 1000;
-      top: 18px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: min(460px, calc(100% - 32px));
+      top: 14px;
+      left: 14px;
+      right: 76px;
+      max-width: 440px;
     }
 
-    .top-right-controls {
-      position: absolute;
-      z-index: 1000;
-      top: 18px;
-      right: 18px;
+    .search-form, .location-choice {
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid #ddd;
+    }
+
+    .search-form {
       display: flex;
-      flex-direction: column;
-      align-items: flex-end;
       gap: 8px;
     }
 
-    .home-button, .paths-button {
-      padding: 10px 14px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    #location-input {
+      flex: 1;
+      border: 1px solid #ccd0d5;
+      border-radius: 6px;
+      padding: 9px 10px;
+      font-size: 15px;
+      min-width: 0;
     }
 
-    .paths-button {
+    .search-button {
+      padding: 0 14px;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .location-choice {
       display: none;
+      margin-top: 6px;
+    }
+
+    .location-name {
+      margin-bottom: 8px;
+      color: #333;
+      font-size: 13px;
+      line-height: 1.3;
+      word-break: break-word;
+    }
+
+    .choice-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .go-button, .cancel-button {
+      padding: 8px 14px;
+      font-size: 13px;
+      border-radius: 6px;
+      border: 0;
+    }
+
+    .cancel-button {
+      background: #e2e8f0;
+      color: #333;
+    }
+
+    .status {
+      display: block;
+      margin-top: 6px;
+      padding: 4px 8px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #eee;
+      border-radius: 6px;
+      color: #333;
+      font-size: 12px;
+      text-align: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    .home-button {
+      position: absolute;
+      z-index: 1000;
+      top: 14px;
+      right: 14px;
+      height: 44px;
+      width: 52px;
+      font-size: 13px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .paths-dock {
+      position: absolute;
+      z-index: 1000;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      display: none;
+      flex-direction: row-reverse;
+      align-items: center;
+    }
+
+    .paths-tab-btn {
       background: #4a5568;
+      color: #fff;
+      padding: 8px 14px;
+      font-size: 13px;
+      border: 0;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      font-weight: bold;
+      white-space: nowrap;
+      transform: rotate(-90deg);
+      transform-origin: bottom right;
+      margin-right: 0;
     }
 
     .routes-panel {
       display: none;
-      width: 250px;
       background: #fff;
       border: 1px solid #ddd;
       border-radius: 8px;
       padding: 8px;
-      margin-top: 4px;
+      margin-right: 12px;
+      max-width: calc(100vw - 60px);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+      overflow-x: auto;
+    }
+
+    #routes-list {
+      display: flex;
+      flex-direction: row;
+      gap: 8px;
     }
 
     .route-item {
-      padding: 8px;
-      margin-bottom: 6px;
+      min-width: 130px;
+      padding: 8px 10px;
+      margin-bottom: 0;
       border-radius: 6px;
       border: 1px solid #eee;
       background: #fff;
       cursor: pointer;
-    }
-
-    .route-item:last-child {
-      margin-bottom: 0;
+      flex-shrink: 0;
     }
 
     .route-item.active {
-      border: 1px solid #1769aa;
-      background: #fff;
+      border: 1.5px solid #1769aa;
+      background: #f8fafc;
     }
 
     .route-header {
@@ -153,61 +261,9 @@
       color: #666;
     }
 
-    .search-form, .location-choice {
-      padding: 10px;
-      border-radius: 10px;
-      background: #fff;
-      box-shadow: 0 3px 12px rgba(0,0,0,0.2);
-    }
-
-    .search-form {
-      display: flex;
-      gap: 8px;
-    }
-
-    #location-input {
-      flex: 1;
-      border: 1px solid #ccd0d5;
-      border-radius: 6px;
-      padding: 10px;
-      font-size: 15px;
-    }
-
-    button {
-      cursor: pointer;
-      border: 0;
-      border-radius: 6px;
-      padding: 10px 14px;
-    }
-
-    .cancel-button {
-      color: #333;
-      background: #e9ecef;
-    }
-
-    .location-choice {
-      display: none;
-      margin-top: 8px;
-    }
-
-    .location-name {
-      margin-bottom: 10px;
-      color: #333;
-      font-size: 14px;
-      line-height: 1.35;
-    }
-
-    .choice-actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    .status {
-      display: block;
-      padding-top: 6px;
-      color: #333;
-      font-size: 13px;
-      text-align: center;
+    .leaflet-bottom.leaflet-right {
+      bottom: 24px;
+      right: 14px;
     }
   </style>
 </head>
@@ -220,15 +276,8 @@
   </main>
 
   <div class="app" id="app">
-    <div class="top-right-controls">
-      <button class="home-button" id="home-button" type="button">Home</button>
-      <button class="paths-button" id="paths-button" type="button">Other paths</button>
-      
-      <div class="routes-panel" id="routes-panel">
-        <div id="routes-list"></div>
-      </div>
-    </div>
-    
+    <button class="home-button" id="home-button" type="button">Home</button>
+
     <div class="search-wrap">
       <form class="search-form" id="search-form">
         <input id="location-input" type="search" placeholder="Search destination..." required>
@@ -242,7 +291,15 @@
           <button class="cancel-button" id="cancel-button" type="button">Cancel</button>
         </div>
       </div>
-      <span class="status" id="status"></span>
+      <span class="status" id="status" style="display:none;"></span>
+    </div>
+
+    <!-- right side tab -->
+    <div class="paths-dock" id="paths-dock">
+      <button class="paths-tab-btn" id="paths-button" type="button">Other paths</button>
+      <div class="routes-panel" id="routes-panel">
+        <div id="routes-list"></div>
+      </div>
     </div>
 
     <div id="map"></div>
@@ -250,8 +307,13 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // map and base tiles
-    const map = L.map("map", { maxZoom: 18 }).setView([38.9632, -76.7417], 16);
+    // initialize map with bottom-right zoom controls to prevent overlap
+    const map = L.map("map", { 
+      maxZoom: 18,
+      zoomControl: false 
+    }).setView([38.9632, -76.7417], 16);
+
+    L.control.zoom({ position: "bottomright" }).addTo(map);
 
     L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png?key={{ key }}", {
       maxZoom: 18,
@@ -273,15 +335,26 @@
     const status = document.getElementById("status");
     const choiceBox = document.getElementById("location-choice");
     const locationName = document.getElementById("location-name");
+    const pathsDock = document.getElementById("paths-dock");
     const pathsBtn = document.getElementById("paths-button");
     const routesPanel = document.getElementById("routes-panel");
     const routesList = document.getElementById("routes-list");
 
     const routePalette = [
-      { color: "#1769aa", label: "Suggested" },
+      { color: "#1769aa", label: "Recommended" },
       { color: "#e67e22", label: "Option 2" },
       { color: "#8e44ad", label: "Option 3" }
     ];
+
+    function showStatus(text) {
+      if (!text) {
+        status.style.display = "none";
+        status.innerHTML = "";
+      } else {
+        status.style.display = "block";
+        status.innerHTML = text;
+      }
+    }
 
     // clear drawn lines and reset list
     function clearRoutes() {
@@ -290,7 +363,7 @@
       routeData = [];
       selectedIndex = 0;
       panelVisible = false;
-      pathsBtn.style.display = "none";
+      pathsDock.style.display = "none";
       routesPanel.style.display = "none";
       routesList.innerHTML = "";
     }
@@ -298,14 +371,14 @@
     // continuous live gps tracking
     function startLiveTracking(centerOnUser = false) {
       if (!navigator.geolocation) {
-        status.textContent = "Location unavailable.";
+        showStatus("Location unavailable.");
         return;
       }
 
       const geoOptions = {
         enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 10000
+        maximumAge: 60000,
+        timeout: 15000
       };
 
       if (watchId !== null) {
@@ -324,16 +397,16 @@
             fillOpacity: 1, 
             weight: 2 
           }).addTo(map);
-          map.setView([myLat, myLon], 17);
+          map.setView([myLat, myLon], 16);
         } else {
           userMarker.setLatLng([myLat, myLon]);
         }
 
         if (centerOnUser) {
-          map.setView([myLat, myLon], 17);
+          map.setView([myLat, myLon], 16);
         }
       }, () => {
-        status.textContent = "Unable to read GPS location.";
+        showStatus("Unable to read GPS location.");
       }, geoOptions);
     }
 
@@ -346,7 +419,7 @@
 
     document.getElementById("home-button").addEventListener("click", () => {
       if (myLat && myLon) {
-        map.setView([myLat, myLon], 17);
+        map.setView([myLat, myLon], 16);
       } else {
         startLiveTracking(true);
       }
@@ -358,12 +431,12 @@
       const query = document.getElementById("location-input").value.trim();
       if (!query) return;
 
-      status.textContent = "Searching...";
+      showStatus("Searching...");
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`);
         const results = await res.json();
         if (!results.length) {
-          status.textContent = "Location not found.";
+          showStatus("Location not found.");
           return;
         }
 
@@ -379,9 +452,9 @@
         map.setView(point, 16);
         locationName.textContent = selectedDest.display_name;
         choiceBox.style.display = "block";
-        status.textContent = "";
+        showStatus("");
       } catch (err) {
-        status.textContent = "Search failed.";
+        showStatus("Search failed.");
       }
     });
 
@@ -415,7 +488,7 @@
 
       const activeRoute = routeData[idx];
       const activeMeta = routePalette[idx];
-      status.innerHTML = `<strong>${activeMeta.label}: ${activeRoute.score}/1000</strong> &bull; ${activeRoute.minutes} min (${activeRoute.miles} mi)`;
+      showStatus(`<strong>${activeMeta.label}: ${activeRoute.score}/1000</strong> &bull; ${activeRoute.minutes} min (${activeRoute.miles} mi)`);
     }
 
     // populate other paths drawer
@@ -448,11 +521,11 @@
     // fetch routes from backend
     document.getElementById("go-button").addEventListener("click", async () => {
       if (!selectedDest || !myLat) {
-        status.textContent = "Location error";
+        showStatus("Location error");
         return;
       }
 
-      status.textContent = "Auditing walking paths...";
+      showStatus("Lode-ing walking paths...");
       try {
         const res = await fetch("/api/route", {
           method: "POST",
@@ -488,15 +561,15 @@
         map.fitBounds(polylineLayers[0].getBounds(), { padding: [40, 40] });
 
         if (routeData.length > 1) {
-          pathsBtn.style.display = "block";
+          pathsDock.style.display = "flex";
           renderRoutesList();
         }
 
         destMarker.setStyle({ color: "#169c46" });
         choiceBox.style.display = "none";
-        status.innerHTML = `<strong>Suggested: ${data.primary.score}/1000</strong> &bull; ${data.primary.minutes} min (${data.primary.miles} mi)`;
+        showStatus(`<strong>Suggested: ${data.primary.score}/1000</strong> &bull; ${data.primary.minutes} min (${data.primary.miles} mi)`);
       } catch (err) {
-        status.textContent = err.message;
+        showStatus(err.message);
       }
     });
 
@@ -511,7 +584,7 @@
       destMarker = null;
       selectedDest = null;
       choiceBox.style.display = "none";
-      status.textContent = "";
+      showStatus("");
     });
   </script>
 </body>
