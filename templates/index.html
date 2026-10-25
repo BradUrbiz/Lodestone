@@ -278,6 +278,9 @@
     <img class="welcome-logo" src="/imgs/lodestonename.png" alt="Lodestone">
     <p class="welcome-tagline">Safety just got a whole Lode easier</p> 
     <button class="start-button" id="start-button" type="button">Start</button>
+    <br>
+    <p class="welcome-tagline">Brad Urbiztondo. 2026 Congressional App Challenge MD05</p> 
+
   </main>
 
   <div class="app" id="app">
@@ -331,6 +334,7 @@
     let destMarker = null;
     let userMarker = null;
     let watchId = null;
+    let isUserPanning = false;
 
     let routeData = [];
     let polylineLayers = [];
@@ -350,6 +354,11 @@
       { color: "#e67e22", label: "Option 2" },
       { color: "#8e44ad", label: "Option 3" }
     ];
+
+    // flag user dragging so gps updates do not yank camera back
+    map.on("dragstart zoomstart", () => {
+      isUserPanning = true;
+    });
 
     function showStatus(text) {
       if (!text) {
@@ -371,6 +380,46 @@
       pathsDock.style.display = "none";
       routesPanel.style.display = "none";
       routesList.innerHTML = "";
+    }
+
+    // calculate distance between two lat/lon points in meters
+    function getDistanceMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const phi1 = lat1 * Math.PI / 180;
+      const phi2 = lat2 * Math.PI / 180;
+      const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+      const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                Math.cos(phi1) * Math.cos(phi2) *
+                Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    // slice off portion of the route you have already walked
+    function trimWalkedPath(lat, lon) {
+      if (!polylineLayers[selectedIndex] || !routeData[selectedIndex]) return;
+
+      const currentPoints = routeData[selectedIndex].points;
+      if (!currentPoints || currentPoints.length <= 1) return;
+
+      let closestIdx = -1;
+      let minDistance = 25; // meters proximity threshold
+
+      for (let i = 0; i < currentPoints.length; i++) {
+        const d = getDistanceMeters(lat, lon, currentPoints[i][0], currentPoints[i][1]);
+        if (d < minDistance) {
+          minDistance = d;
+          closestIdx = i;
+        }
+      }
+
+      // if user passed points, remove them and redraw remaining path
+      if (closestIdx > 0) {
+        const remainingPoints = currentPoints.slice(closestIdx);
+        routeData[selectedIndex].points = remainingPoints;
+        polylineLayers[selectedIndex].setLatLngs(remainingPoints);
+      }
     }
 
     // continuous live gps tracking
@@ -407,9 +456,13 @@
           userMarker.setLatLng([myLat, myLon]);
         }
 
-        if (centerOnUser) {
+        // only center if user specifically requested
+        if (centerOnUser && !isUserPanning) {
           map.setView([myLat, myLon], 16);
         }
+
+        // remove walked segments behind user in real time
+        trimWalkedPath(myLat, myLon);
       }, () => {
         showStatus("Unable to read GPS location.");
       }, geoOptions);
@@ -419,10 +472,13 @@
       document.getElementById("welcome-screen").style.display = "none";
       document.getElementById("app").style.display = "block";
       map.invalidateSize();
+      isUserPanning = false;
       startLiveTracking(true);
     });
 
+    // home button explicitly recenters screen and clears pan lock
     document.getElementById("home-button").addEventListener("click", () => {
+      isUserPanning = false;
       if (myLat && myLon) {
         map.setView([myLat, myLon], 16);
       } else {
@@ -454,6 +510,7 @@
           destMarker.setLatLng(point).setStyle({ color: "#1769aa" });
         }
 
+        isUserPanning = true;
         map.setView(point, 16);
         locationName.textContent = selectedDest.display_name;
         choiceBox.style.display = "block";
@@ -517,6 +574,7 @@
         `;
         item.addEventListener("click", () => {
           highlightSelectedRoute(idx);
+          isUserPanning = true;
           map.fitBounds(polylineLayers[idx].getBounds(), { padding: [40, 40] });
         });
         routesList.appendChild(item);
@@ -530,7 +588,7 @@
         return;
       }
 
-      showStatus("Auditing walking paths...");
+      showStatus("Lode-ing routes...");
       try {
         const res = await fetch("/api/route", {
           method: "POST",
@@ -563,6 +621,7 @@
           polylineLayers.push(line);
         });
 
+        isUserPanning = true;
         map.fitBounds(polylineLayers[0].getBounds(), { padding: [40, 40] });
 
         if (routeData.length > 1) {

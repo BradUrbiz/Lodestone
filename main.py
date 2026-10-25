@@ -15,7 +15,7 @@ def home():
 def images(filename):
     return send_from_directory(os.path.join(app.root_path, "imgs"), filename)
 
-# query osrm helper
+# request walking paths from osrm
 def query_osrm(start_lon, start_lat, dest_lon, dest_lat, via_lon=None, via_lat=None):
     if via_lon and via_lat:
         pts = f"{start_lon},{start_lat};{via_lon},{via_lat};{dest_lon},{dest_lat}"
@@ -30,31 +30,31 @@ def query_osrm(start_lon, start_lat, dest_lon, dest_lat, via_lon=None, via_lat=N
 
 @app.route("/api/route", methods=["POST"])
 def get_route():
-    # current and target GPS
     data = request.get_json()
     start_lat = float(data["start_lat"])
     start_lon = float(data["start_lon"])
     dest_lat = float(data["dest_lat"])
     dest_lon = float(data["dest_lon"])
 
-    # osrm natural walking routes
     raw_routes = query_osrm(start_lon, start_lat, dest_lon, dest_lat)
 
-    # if osrm only gives 1 option
+    # ensure 3 routes by querying varied perpendicular branches
     if len(raw_routes) < 3:
         mid_lat = (start_lat + dest_lat) / 2
         mid_lon = (start_lon + dest_lon) / 2
         d_lat = dest_lat - start_lat
         d_lon = dest_lon - start_lon
 
-        # 20% offset to branch onto nearby parallel corridors
-        alt1 = query_osrm(start_lon, start_lat, dest_lon, dest_lat, mid_lon + (d_lat * 0.20), mid_lat - (d_lon * 0.20))
-        alt2 = query_osrm(start_lon, start_lat, dest_lon, dest_lat, mid_lon - (d_lat * 0.20), mid_lat + (d_lon * 0.20))
-
-        if alt1:
-            raw_routes.append(alt1[0])
-        if alt2:
-            raw_routes.append(alt2[0])
+        # list of branching offsets to try
+        offsets = [0.15, -0.15, 0.25, -0.25]
+        for off in offsets:
+            if len(raw_routes) >= 5:
+                break
+            via_lon = mid_lon + (d_lat * off)
+            via_lat = mid_lat - (d_lon * off)
+            branch = query_osrm(start_lon, start_lat, dest_lon, dest_lat, via_lon, via_lat)
+            if branch:
+                raw_routes.append(branch[0])
 
     if not raw_routes:
         return jsonify({"error": "No walking route found"}), 404
@@ -66,11 +66,10 @@ def get_route():
     cached_crashes = None
 
     for r in raw_routes:
-        # prevent loop by discarding routes >30% longer 
-        if r["distance"] > base_dist * 1.3:
+        # filter out dead end loops
+        if r["distance"] > base_dist * 1.35:
             continue
 
-        # pull turn steps and streets
         all_steps = []
         unique_streets = []
         for leg in r.get("legs", []):
@@ -81,7 +80,6 @@ def get_route():
                     if name not in unique_streets:
                         unique_streets.append(name)
 
-        # prevent loop by discarding if it walks down a street, enters a loop, and comes back onto same street
         is_loop = False
         for i in range(len(all_steps) - 2):
             if all_steps[i] == all_steps[i + 2] and all_steps[i] != all_steps[i + 1]:
@@ -90,7 +88,6 @@ def get_route():
         if is_loop:
             continue
 
-        # prevent identical duplicate routes by checking street sequence and coordinates
         street_sig = "->".join(all_steps)
         pts = [[c[1], c[0]] for c in r["geometry"]["coordinates"]]
         coord_sig = f"{len(pts)}-{round(r['distance'], 1)}"
@@ -113,18 +110,6 @@ def get_route():
             "miles": mi,
             "score": score,
             "factors": factors
-        })
-
-    # if anti-loop filters were too strict, keep at least the direct route
-    if not evaluated_routes:
-        r = raw_routes[0]
-        pts = [[c[1], c[0]] for c in r["geometry"]["coordinates"]]
-        evaluated_routes.append({
-            "points": pts,
-            "minutes": round(r["duration"] / 60),
-            "miles": round(r["distance"] * 0.000621371, 2),
-            "score": 600,
-            "factors": {}
         })
 
     # sort so highest safety score is primary
