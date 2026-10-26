@@ -53,7 +53,7 @@
       line-height: 1.4;
     }
 
-    .start-button, .search-button, .go-button, .home-button, .paths-tab-btn {
+    .start-button, .search-button, .go-button, .home-button, .paths-tab-btn, .report-button {
       color: #fff;
       background: #1769aa;
       border: 0;
@@ -170,6 +170,42 @@
       justify-content: center;
     }
 
+    /* bottom-left simple report button */
+    .report-button {
+      position: absolute;
+      z-index: 1000;
+      bottom: 24px;
+      left: 14px;
+      padding: 10px 14px;
+      font-size: 13px;
+      background: #c53030;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+
+    /* report hazard simple modal */
+    .report-card {
+      display: none;
+      position: absolute;
+      z-index: 3000;
+      bottom: 74px;
+      left: 14px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 10px;
+      width: min(240px, calc(100vw - 32px));
+      box-shadow: 0 3px 12px rgba(0,0,0,0.15);
+    }
+
+    .report-card select {
+      width: 100%;
+      padding: 7px;
+      margin-bottom: 8px;
+      border: 1px solid #ccd0d5;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
     /* 90-degree rotated tab button pinned against right edge */
     .paths-dock {
       position: absolute;
@@ -266,6 +302,24 @@
       color: #666;
     }
 
+    /* arrival popup in center of screen */
+    .arrival-popup {
+      display: none;
+      position: absolute;
+      z-index: 2500;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #2e7d32;
+      color: #fff;
+      padding: 14px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      text-align: center;
+      white-space: nowrap;
+    }
+
     .leaflet-bottom.leaflet-right {
       bottom: 24px;
       right: 14px;
@@ -278,13 +332,24 @@
     <img class="welcome-logo" src="/imgs/lodestonename.png" alt="Lodestone">
     <p class="welcome-tagline">Safety just got a whole Lode easier</p> 
     <button class="start-button" id="start-button" type="button">Start</button>
-    <br>
-    <p class="welcome-tagline">Brad Urbiztondo. 2026 Congressional App Challenge MD05</p> 
-
   </main>
 
   <div class="app" id="app">
     <button class="home-button" id="home-button" type="button">Home</button>
+    <button class="report-button" id="report-button" type="button">Report</button>
+
+    <div class="report-card" id="report-card">
+      <select id="report-hazard-type">
+        <option value="Broken Sidewalk">Broken Sidewalk</option>
+        <option value="Dangerous Crossing">Dangerous Crossing</option>
+        <option value="Speeding / Traffic">Speeding / Traffic</option>
+        <option value="Construction">Construction</option>
+      </select>
+      <div class="choice-actions">
+        <button class="go-button" id="report-save" type="button" style="background:#c53030; color:#fff;">Save</button>
+        <button class="cancel-button" id="report-cancel" type="button">Cancel</button>
+      </div>
+    </div>
 
     <div class="search-wrap">
       <form class="search-form" id="search-form">
@@ -309,6 +374,8 @@
     <div class="routes-panel" id="routes-panel">
       <div id="routes-list"></div>
     </div>
+
+    <div class="arrival-popup" id="arrival-popup">You have arrived!</div>
 
     <div id="map"></div>
   </div>
@@ -341,6 +408,10 @@
     let selectedIndex = 0;
     let panelVisible = false;
 
+    let isReporting = false;
+    let reportLatLng = null;
+    let hazardMarkers = [];
+
     const status = document.getElementById("status");
     const choiceBox = document.getElementById("location-choice");
     const locationName = document.getElementById("location-name");
@@ -348,6 +419,13 @@
     const pathsBtn = document.getElementById("paths-button");
     const routesPanel = document.getElementById("routes-panel");
     const routesList = document.getElementById("routes-list");
+    const arrivalPopup = document.getElementById("arrival-popup");
+
+    const reportBtn = document.getElementById("report-button");
+    const reportCard = document.getElementById("report-card");
+    const reportSave = document.getElementById("report-save");
+    const reportCancel = document.getElementById("report-cancel");
+    const reportHazardType = document.getElementById("report-hazard-type");
 
     const routePalette = [
       { color: "#1769aa", label: "Suggested" },
@@ -369,6 +447,82 @@
         status.innerHTML = text;
       }
     }
+
+    // load hazards onto map
+    async function fetchHazards() {
+      try {
+        const res = await fetch("/api/hazards");
+        const data = await res.json();
+        hazardMarkers.forEach(m => map.removeLayer(m));
+        hazardMarkers = [];
+
+        data.forEach(h => {
+          const marker = L.circleMarker([h.lat, h.lon], {
+            radius: 6,
+            color: "#c53030",
+            fillColor: "#e53e3e",
+            fillOpacity: 0.85,
+            weight: 2
+          }).addTo(map);
+          marker.bindPopup(`<strong>Hazard:</strong> ${h.type}`);
+          hazardMarkers.push(marker);
+        });
+      } catch (e) {}
+    }
+
+    // report button toggle
+    reportBtn.addEventListener("click", () => {
+      isReporting = true;
+      showStatus("Tap on the map to place hazard.");
+    });
+
+    // map tap for reporting
+    map.on("click", e => {
+      if (!isReporting) return;
+      reportLatLng = e.latlng;
+      isReporting = false;
+      showStatus("");
+      reportCard.style.display = "block";
+    });
+
+    reportCancel.addEventListener("click", () => {
+      reportCard.style.display = "none";
+      reportLatLng = null;
+      isReporting = false;
+      showStatus("");
+    });
+
+    reportSave.addEventListener("click", async () => {
+      const targetLat = reportLatLng ? reportLatLng.lat : myLat;
+      const targetLon = reportLatLng ? reportLatLng.lng : myLon;
+
+      if (!targetLat || !targetLon) {
+        showStatus("No point selected.");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/hazards", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lat: targetLat,
+            lon: targetLon,
+            type: reportHazardType.value
+          })
+        });
+
+        if (res.ok) {
+          reportCard.style.display = "none";
+          reportLatLng = null;
+          showStatus("Report submitted!");
+          setTimeout(() => showStatus(""), 3000);
+          fetchHazards();
+        }
+      } catch (e) {
+        showStatus("Could not save report.");
+      }
+    });
 
     // clear drawn lines and reset list
     function clearRoutes() {
@@ -401,7 +555,25 @@
       if (!polylineLayers[selectedIndex] || !routeData[selectedIndex]) return;
 
       const currentPoints = routeData[selectedIndex].points;
-      if (!currentPoints || currentPoints.length <= 1) return;
+      if (!currentPoints || currentPoints.length === 0) return;
+
+      // check if arrived at final destination coordinate
+      const finalCoord = currentPoints[currentPoints.length - 1];
+      const distToDest = getDistanceMeters(lat, lon, finalCoord[0], finalCoord[1]);
+
+      if (distToDest < 35 || currentPoints.length <= 1) {
+        arrivalPopup.style.display = "block";
+        setTimeout(() => {
+          arrivalPopup.style.display = "none";
+          if (destMarker) map.removeLayer(destMarker);
+          clearRoutes();
+          destMarker = null;
+          selectedDest = null;
+          choiceBox.style.display = "none";
+          showStatus("");
+        }, 5000);
+        return;
+      }
 
       let closestIdx = -1;
       let minDistance = 25; // meters proximity threshold
@@ -456,7 +628,7 @@
           userMarker.setLatLng([myLat, myLon]);
         }
 
-        // only center if user specifically requested
+        // only center if user specifically requested or hasn't panned
         if (centerOnUser && !isUserPanning) {
           map.setView([myLat, myLon], 16);
         }
@@ -474,6 +646,7 @@
       map.invalidateSize();
       isUserPanning = false;
       startLiveTracking(true);
+      fetchHazards();
     });
 
     // home button explicitly recenters screen and clears pan lock
@@ -486,7 +659,7 @@
       }
     });
 
-    // search address
+    // search address with country code lock to prevent foreign/off-state matches
     document.getElementById("search-form").addEventListener("submit", async e => {
       e.preventDefault();
       const query = document.getElementById("location-input").value.trim();
@@ -494,7 +667,7 @@
 
       showStatus("Searching...");
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`);
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=us&limit=1&q=${encodeURIComponent(query)}`);
         const results = await res.json();
         if (!results.length) {
           showStatus("Location not found.");
@@ -506,6 +679,18 @@
         
         if (!destMarker) {
           destMarker = L.circleMarker(point, { radius: 10, color: "#1769aa", fillOpacity: 0.7 }).addTo(map);
+          destMarker.on("click", () => {
+            arrivalPopup.style.display = "block";
+            setTimeout(() => {
+              arrivalPopup.style.display = "none";
+              if (destMarker) map.removeLayer(destMarker);
+              clearRoutes();
+              destMarker = null;
+              selectedDest = null;
+              choiceBox.style.display = "none";
+              showStatus("");
+            }, 5000);
+          });
         } else {
           destMarker.setLatLng(point).setStyle({ color: "#1769aa" });
         }
@@ -633,7 +818,7 @@
         choiceBox.style.display = "none";
         showStatus(`<strong>Suggested: ${data.primary.score}/1000</strong> &bull; ${data.primary.minutes} min (${data.primary.miles} mi)`);
       } catch (err) {
-        showStatus(err.message);
+        showStatus(err.message || "Route lookup timed out. Please try again.");
       }
     });
 

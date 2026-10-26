@@ -1,4 +1,5 @@
 import os
+import json
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import requests
@@ -7,6 +8,21 @@ from services.scoring import evaluate_route
 load_dotenv()
 app = Flask(__name__)
 
+hazards_file = os.path.join(app.root_path, "hazards.json")
+
+def load_hazards():
+    if not os.path.exists(hazards_file):
+        return []
+    try:
+        with open(hazards_file, "r") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_hazards(hazards):
+    with open(hazards_file, "w") as f:
+        json.dump(hazards, f, indent=2)
+
 @app.route("/")
 def home():
     return render_template("index.html", key=os.getenv("CARTO_API_KEY", ""))
@@ -14,6 +30,28 @@ def home():
 @app.route("/imgs/<path:filename>")
 def images(filename):
     return send_from_directory(os.path.join(app.root_path, "imgs"), filename)
+
+@app.route("/api/hazards", methods=["GET"])
+def get_hazards():
+    return jsonify(load_hazards())
+
+@app.route("/api/hazards", methods=["POST"])
+def add_hazard():
+    data = request.get_json()
+    lat = float(data.get("lat"))
+    lon = float(data.get("lon"))
+    hazard_type = data.get("type", "hazard")
+
+    hazards = load_hazards()
+    new_hazard = {
+        "id": len(hazards) + 1,
+        "lat": lat,
+        "lon": lon,
+        "type": hazard_type
+    }
+    hazards.append(new_hazard)
+    save_hazards(hazards)
+    return jsonify({"success": True, "hazard": new_hazard})
 
 # request walking paths from osrm
 def query_osrm(start_lon, start_lat, dest_lon, dest_lat, via_lon=None, via_lat=None):

@@ -23,7 +23,30 @@ parameters = {
     "high_speed": -65,
     "pedestrian_crash": -100,
     "car_crash": -75,
+    # community reported hazard deduction
+    "community_hazard": -80
 }
+
+# community hazards check
+def get_community_hazard_factors(coords):
+    hazards_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "hazards.json")
+    if not os.path.exists(hazards_file):
+        return {"community_hazard": False}
+
+    try:
+        with open(hazards_file, "r") as f:
+            hazards = json.load(f)
+    except Exception:
+        return {"community_hazard": False}
+
+    for h in hazards:
+        h_lat = h.get("lat")
+        h_lon = h.get("lon")
+        for pt in coords:
+            if abs(pt[0] - h_lat) < 0.0004 and abs(pt[1] - h_lon) < 0.0004:
+                return {"community_hazard": True}
+
+    return {"community_hazard": False}
 
 # maryland 2025 state crash data
 def get_real_crash_data(coords):
@@ -163,8 +186,9 @@ def evaluate_route(coords, street_names, distance_mi, minutes, cached_osm=None, 
     osm_factors = cached_osm if cached_osm else get_osrm_infrastructure_score(coords)
     crash_factors = cached_crashes if cached_crashes else get_real_crash_data(coords)
     ai_factors = get_ai_risk_factors(street_names, distance_mi, minutes)
+    community_factors = get_community_hazard_factors(coords)
 
-    all_factors = {**osm_factors, **crash_factors, **ai_factors}
+    all_factors = {**osm_factors, **crash_factors, **ai_factors, **community_factors}
 
     score = 1000
     for factor, is_present in all_factors.items():
