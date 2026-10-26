@@ -331,6 +331,7 @@
   <main class="welcome-screen" id="welcome-screen">
     <img class="welcome-logo" src="/imgs/lodestonename.png" alt="Lodestone">
     <p>Safety just got a whole Lode easier</p> 
+    <br>
     <button class="start-button" id="start-button" type="button">Start</button>
     <br>
     <p>Created by: Brad Urbiztondo</p>
@@ -467,7 +468,28 @@
             fillOpacity: 0.85,
             weight: 2
           }).addTo(map);
-          marker.bindPopup(`<strong>Hazard:</strong> ${h.type}`);
+
+          const popupContent = document.createElement("div");
+          popupContent.innerHTML = `
+            <strong>Hazard:</strong> ${h.type}<br>
+            <button class="delete-hazard-btn" style="margin-top:6px; padding:4px 8px; background:#c53030; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:11px;">Remove</button>
+          `;
+
+          popupContent.querySelector(".delete-hazard-btn").addEventListener("click", async () => {
+            try {
+              const delRes = await fetch(`/api/hazards/${h.id}`, { method: "DELETE" });
+              if (delRes.ok) {
+                map.closePopup();
+                fetchHazards();
+                showStatus("Hazard removed.");
+                setTimeout(() => showStatus(""), 3000);
+              }
+            } catch (err) {
+              showStatus("Could not remove hazard.");
+            }
+          });
+
+          marker.bindPopup(popupContent);
           hazardMarkers.push(marker);
         });
       } catch (e) {}

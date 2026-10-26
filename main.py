@@ -53,6 +53,14 @@ def add_hazard():
     save_hazards(hazards)
     return jsonify({"success": True, "hazard": new_hazard})
 
+# remove hazard stored in json
+@app.route("/api/hazards/<int:hazard_id>", methods=["DELETE"])
+def delete_hazard(hazard_id):
+    hazards = load_hazards()
+    updated_hazards = [h for h in hazards if h.get("id") != hazard_id]
+    save_hazards(updated_hazards)
+    return jsonify({"success": True})
+
 # request walking paths from osrm
 def query_osrm(start_lon, start_lat, dest_lon, dest_lat, via_lon=None, via_lat=None):
     if via_lon and via_lat:
